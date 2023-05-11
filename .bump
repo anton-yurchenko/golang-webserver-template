@@ -1,0 +1,5 @@
+[go]
+enabled = true
+
+[docker]
+enabled = true
