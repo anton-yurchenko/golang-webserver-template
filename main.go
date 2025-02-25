@@ -19,9 +19,11 @@ import (
 
 const (
 	Version                string = "0.1.0"
+
 	ReadTimeoutSeconds     int64  = 30
 	WriteTimeoutSeconds    int64  = 30
 	IdleTimeoutSeconds     int64  = 30
+
 	ShutdownTimeoutSeconds int64  = 10
 )
 
@@ -70,20 +72,20 @@ func init() {
 	}
 }
 
-func shutdown(log *logrus.Entry, srv *http.Server, timeout time.Duration) {
+func shutdown(log *logrus.Entry, srv *http.Server) {
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM)
 	<-s
-	log.Info("shutting down server")
+	log.Warn("server shut down signal received")
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(ShutdownTimeoutSeconds)*time.Second)
 	defer cancel()
 
-	err := srv.Shutdown(ctx)
-	if err != nil {
-		log.Fatalf("error encountered during server shutdown: %v", err.Error())
+	if err := srv.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatalf("error encountered during server shutdown: %v", err)
 	}
 
+	log.Info("server shut down successfully")
 	os.Exit(0)
 }
 
@@ -107,8 +109,10 @@ func main() {
 
 	go func() {
 		log.Infof("server listening on port %v", Port)
-		log.Fatal(srv.ListenAndServe())
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
 	}()
 
-	shutdown(log, srv, 300)
+	shutdown(log, srv)
 }
